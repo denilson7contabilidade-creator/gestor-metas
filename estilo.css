@@ -312,3 +312,65 @@ svg.ic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-wid
 
 .cartao-aviso.alerta { background: #FFF1D6; }
 .cartao-aviso .acoes { row-gap: 4px; }
+
+/* ----- v2.0: prazos, planos, livros por páginas, relatório novo ----- */
+.chip.amar { background: #FFF1D6; color: #8A5A00; }
+.vencido { color: var(--perigo); font-weight: 600; }
+.info .vencido svg.ic { color: var(--perigo); }
+.liga { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--destaque); background: var(--fundo-suave); padding: 2px 8px; border-radius: 99px; max-width: 100%; }
+.liga svg.ic { width: 13px; height: 13px; }
+.meta-c small svg.ic { width: 12px; height: 12px; vertical-align: -1px; margin-right: 2px; }
+.topo .trilho { position: relative; overflow: visible; }
+.topo .trilho em { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; background: var(--sobre-fundo); opacity: .85; border-radius: 2px; }
+.topo .trilho i { border-radius: 99px; }
+.det-prazo { display: flex; align-items: center; gap: 6px; margin: 10px 4px 0; font-size: 13px; color: var(--sobre-fundo-2); }
+.det-prazo svg.ic { width: 16px; height: 16px; }
+.plano { margin: 12px 12px 4px; padding: 12px 14px; border-radius: 16px; background: var(--fundo-suave); }
+.plano-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.plano-cab b { display: flex; align-items: center; gap: 6px; }
+.plano-cab b svg.ic { width: 18px; height: 18px; color: var(--destaque); }
+.plano-cab .btn { width: auto; padding: 8px 12px; font-size: 13.5px; }
+.plano-l { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 10px 0 0; }
+.plano-l + .plano-l { border-top: 1px solid rgba(0,0,0,.06); margin-top: 10px; }
+.plano-l .meio { flex: 1; min-width: 0; }
+.plano-l .meio b { display: block; font-weight: 600; font-size: 14.5px; overflow-wrap: anywhere; }
+.plano-l small { color: #555; font-size: 12.5px; }
+.plano-l svg.ic { width: 18px; height: 18px; color: #999; }
+.plano-prev { margin: 10px 0 0; font-size: 13.5px; line-height: 1.5; }
+.plano-info { display: flex; gap: 10px; align-items: flex-start; background: var(--fundo-suave); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 14px; line-height: 1.5; }
+.plano-info svg.ic { width: 20px; height: 20px; color: var(--destaque); margin-top: 2px; }
+.plano-info input { display: inline-block; width: 96px; padding: 6px 8px; margin: 0 4px; }
+.sugestao { margin: -4px 0 12px; font-size: 13.5px; color: #444; }
+.sugestao button { margin-left: 6px; padding: 4px 10px; border-radius: 8px; background: var(--preto); color: #fff; font-size: 13px; font-weight: 600; }
+.linha-item.atual { background: color-mix(in srgb, var(--fundo-suave) 45%, white); }
+.mini-trilho { display: block; height: 6px; border-radius: 99px; background: var(--cinza-claro); overflow: hidden; margin-top: 6px; max-width: 260px; }
+.mini-trilho i { display: block; height: 100%; border-radius: 99px; background: var(--destaque); min-width: 3px; }
+.guardado { display: block; margin-top: 2px; }
+.guardado small { font-size: 12px; color: var(--cinza); }
+.add-linha.duplo-inv input:nth-child(2) { flex: 0 0 30%; }
+.rel-frase { margin: 12px 4px 0; padding: 11px 13px; border-radius: 12px; background: var(--vidro); font-size: 14.5px; line-height: 1.45; }
+.rel-bloco h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.rel-bloco h3 svg.ic { width: 20px; height: 20px; color: var(--destaque); }
+.rel-bloco h4 { margin: 16px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--cinza); }
+.rel-tres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.rel-tres > div { background: var(--papel); border-radius: 12px; padding: 9px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rel-tres b { font-size: 21px; white-space: nowrap; }
+.rel-tres span { font-size: 11.5px; color: #555; line-height: 1.25; }
+.rel-tres em { font-style: normal; font-weight: 700; }
+.rel-tres em.sobe { color: var(--ok); } .rel-tres em.desce { color: var(--perigo); }
+.rel-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.hab { padding: 8px 0; }
+.hab + .hab { border-top: 1px solid var(--linha); }
+.hab-l1 { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+.hab-l1 span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.hab small, .plan-c small { font-size: 12px; color: var(--cinza); }
+.pontos { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0 3px; }
+.pontos i { width: 10px; height: 10px; border-radius: 3px; background: var(--destaque); }
+.pontos i.x { background: #F3C9C4; }
+.plan-c { padding: 8px 0; }
+.plan-c + .plan-c { border-top: 1px solid var(--linha); }
+.conq > div { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 14px; }
+.conq > div + div { border-top: 1px solid var(--linha); }
+.conq svg.ic { width: 20px; height: 20px; color: var(--destaque); }
+.conq span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.conq small { color: var(--cinza); font-size: 12px; white-space: nowrap; }
