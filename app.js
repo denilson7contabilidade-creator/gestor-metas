@@ -2,7 +2,7 @@
 /* Gestor de Metas — app instalável, dados guardados só no aparelho.
    Família: Gestor de Finanças (mesmo endereço, pastas vizinhas). */
 
-const VERSAO_APP = "1.2";
+const VERSAO_APP = "1.3";
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -641,7 +641,7 @@ ligar.ajustes = () => {
   $("[data-notif]").onclick = pedirNotificacoes;
   $("[data-resumo]").onclick = () => { S.d.config.resumoAtivo = !S.d.config.resumoAtivo; gravar(); desenhar(); };
   $("[data-resumo-hora]").onchange = (e) => { if (e.target.value) { S.d.config.resumo = e.target.value; gravar(); aviso(`Resumo às ${e.target.value}`); } };
-  const t = $("[data-testar]"); if (t) t.onclick = () => notificar({ id: "teste-" + Date.now(), titulo: "Gestor de Metas", corpo: "Os avisos estão funcionando." });
+  const t = $("[data-testar]"); if (t) t.onclick = testarNotificacao;
   $("[data-cats]").onclick = telaCategorias;
   $("[data-tema-bt]").onclick = escolherTema;
   $("[data-backup]").onclick = salvarBackup;
@@ -965,6 +965,30 @@ function proximosAvisos() {
 let timers = [];
 async function lerMostrados() { try { const c = await caches.open("gm-agenda"); const r = await c.match("mostrados.json"); return r ? await r.json() : []; } catch { return []; } }
 async function marcarMostrado(id) { try { const c = await caches.open("gm-agenda"); const l = await lerMostrados(); l.push(id); await c.put("mostrados.json", new Response(JSON.stringify(l.slice(-300)))); } catch {} }
+// Teste: mostra o aviso e explica o que fazer se ele não aparecer no celular
+async function testarNotificacao() {
+  let erro = "", criada = false;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) erro = "O app ainda não terminou de carregar. Feche e abra de novo.";
+    else {
+      await reg.showNotification("Gestor de Metas", { body: "Teste: os avisos estão funcionando.", tag: "teste", icon: "icons/icon-192.png", badge: "icons/badge-96.png", vibrate: [120, 60, 120], data: { url: "./" } });
+      criada = (await reg.getNotifications({ tag: "teste" })).length > 0;
+    }
+  } catch (e) { erro = String(e && e.message || e); }
+  const el = abrirCamada(`<h2>${criada ? "Aviso enviado" : "O aviso não foi criado"}</h2>
+    <p class="dica" style="text-align:center">${criada ? "Puxe a barra de notificações do celular para baixo. O aviso de teste deve estar lá." : esc(erro || "O navegador recusou o aviso.")}</p>
+    <p style="margin:0 0 8px"><b>Não apareceu?</b> No Samsung, o Android pode estar bloqueando:</p>
+    <div class="passos">
+      <div><b>1</b><span>Abra <b>Configurações</b> do celular → <b>Notificações</b> → <b>Notificações de apps</b>.</span></div>
+      <div><b>2</b><span>Ative <b>Chrome</b>. Se o app estiver instalado, ative também <b>Gestor de Metas</b>.</span></div>
+      <div><b>3</b><span>Toque no nome do app e confira se as categorias de aviso estão ligadas e se ele <b>não</b> está em <b>Não perturbe</b>.</span></div>
+      <div><b>4</b><span>Em <b>Configurações → Bateria → Limites de uso em segundo plano</b>, tire o Chrome e o Gestor de Metas de <b>Apps em suspensão</b>.</span></div>
+    </div>
+    <div class="botoes"><button class="btn preto" data-ok>Entendi</button><button class="btn leve" data-de-novo>Testar de novo</button></div>`);
+  $("[data-ok]", el).onclick = () => fechar();
+  $("[data-de-novo]", el).onclick = () => fechar(1, testarNotificacao);
+}
 async function notificar(a) {
   if (estadoNotificacoes() !== "ativo") return;
   if (!a.id.startsWith("teste") && (await lerMostrados()).includes(a.id)) return;

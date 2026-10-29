@@ -2,7 +2,7 @@
 // e mostra os lembretes quando o Chrome acorda o app.
 // Atenção: o Gestor de Finanças fica no mesmo endereço, então só mexemos
 // em caches que começam com "gm-".
-const VERSAO = "gm-v3";
+const VERSAO = "gm-v4";
 const AGENDA = "gm-agenda";
 const ARQUIVOS = [
   "./",
