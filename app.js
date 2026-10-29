@@ -2,7 +2,7 @@
 /* Gestor de Metas — app instalável, dados guardados só no aparelho.
    Família: Gestor de Finanças (mesmo endereço, pastas vizinhas). */
 
-const VERSAO_APP = "2.0";
+const VERSAO_APP = "2.1";
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -304,7 +304,7 @@ function telaHoje() {
   if (lista.length) corpo += `<div class="sec"><span>Afazeres ${eHoje ? "de hoje" : "do dia"}</span><span class="num">${feitos}/${lista.length}</span></div>` + lista.map((a) => linhaAfazer(a, iso)).join("");
   else if (vazioTotal) corpo += `<div class="vazio">${ic("target")}Bem-vindo! Toque no <b>+</b> para criar um afazer, uma meta ou uma compra.<button class="btn leve" data-exemplos>Ver o app com exemplos</button></div>`;
   else corpo += `<div class="vazio">${ic("calendar-clock")}Nada marcado para ${eHoje ? "hoje" : "este dia"}.<br>Toque no <b>+</b> para adicionar.</div>`;
-  if (!vazioTotal) corpo += atalhoCompras();
+  if (!vazioTotal) corpo += proximosDias(iso) + atalhoCompras();
   return `<header class="topo">
       <div class="topo-linha"><button class="bt-redondo" data-dia="-1" aria-label="Dia anterior">${ic("chevron-left")}</button>
         <div class="tit"><b>${rotuloDia(iso)}</b><small>${nomeData(iso)}</small></div>
@@ -314,7 +314,23 @@ function telaHoje() {
       ${prox ? `<div class="prox">${ic("clock")}<span>Próximo: ${esc(prox.titulo)}</span><b>${prox.hora}</b></div>` : ""}
     </header><main class="conteudo">${corpo}</main>`;
 }
+// resumo dos próximos 4 dias: quantos afazeres, os primeiros nomes e prazos que vencem
+function proximosDias(iso) {
+  const linhas = [];
+  for (let i = 1; i <= 4; i++) {
+    const d = somaDias(iso, i), l = afazeresDoDia(d), pend = l.filter((a) => !a.feitos[d]);
+    const prazos = [...S.d.metas.filter((m) => m.prazo === d && !progresso(m).completa).map((m) => m.titulo), ...S.d.compras.filter((x) => x.prazo === d && !x.comprado).map((x) => x.nome)];
+    const nomes = pend.slice(0, 2).map((a) => (a.hora ? a.hora + " " : "") + a.titulo).join(" · ") + (pend.length > 2 ? ` · +${pend.length - 2}` : "");
+    const dt = dataDe(d), dia = `${DIAS[dt.getDay()].replace("-feira", "").slice(0, 3)} ${dataCurta(d)}`;
+    linhas.push(`<button class="prox-dia${pend.length ? "" : " livre"}" data-ir-dia="${d}">
+      <span class="pd-dia"><b>${i === 1 && iso === hoje() ? "Amanhã" : dia.charAt(0).toUpperCase() + dia.slice(1, 3)}</b><small>${i === 1 && iso === hoje() ? dia : dataCurta(d)}</small></span>
+      <span class="pd-meio">${pend.length ? `<span class="pd-nomes">${esc(nomes)}</span>` : `<span class="pd-nomes">Livre</span>`}${prazos.length ? `<span class="pd-prazo">${ic("flag")}Prazo: ${esc(prazos.join(", "))}</span>` : ""}</span>
+      <span class="pd-n">${pend.length || ""}</span></button>`);
+  }
+  return `<div class="sec"><span>Próximos dias</span></div><div class="prox-dias">${linhas.join("")}</div>`;
+}
 ligar.hoje = () => {
+  $$("[data-ir-dia]").forEach((b) => (b.onclick = () => { S.dia = b.dataset.irDia; desenhar(); scrollTo(0, 0); }));
   $$("[data-dia]").forEach((b) => (b.onclick = () => { S.dia = somaDias(S.dia, Number(b.dataset.dia)); desenhar(); }));
   const h = $("[data-hoje]"); if (h) h.onclick = () => { S.dia = hoje(); desenhar(); };
   const vc = $("[data-ver-compras]"); if (vc) vc.onclick = () => abrirCompras();
