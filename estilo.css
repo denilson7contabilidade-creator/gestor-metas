@@ -222,3 +222,84 @@ svg.ic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-wid
 .aviso { position: fixed; left: 50%; bottom: calc(92px + var(--seguro-baixo)); transform: translateX(-50%); z-index: 60; background: var(--preto); color: #fff; padding: 11px 18px; border-radius: 12px; font-size: 14.5px; max-width: 90%; text-align: center; }
 .hora-linha { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; color: var(--cinza); white-space: nowrap; }
 .hora-linha input { width: auto; padding: 7px 10px; }
+
+/* ----- v1.1: relatórios, compras na tela Hoje, menu ⋮ ----- */
+.atalho { display: flex; align-items: center; gap: 14px; width: calc(100% - 24px); margin: 18px 12px 0; padding: 12px 14px; border-radius: 16px; background: var(--papel); text-align: left; }
+.atalho .meio { flex: 1; min-width: 0; }
+.atalho .meio b { display: block; font-weight: 600; }
+.atalho .meio small { display: block; color: var(--cinza); font-size: 13px; }
+.atalho .seta { color: #AAA; }
+.marcar-linha { flex-direction: row !important; align-items: center; gap: 10px !important; color: var(--preto) !important; font-size: 15px !important; }
+.marcar-linha input { width: 22px; height: 22px; accent-color: var(--preto); }
+
+.alternar { display: grid; grid-template-columns: repeat(3, 1fr); border: 1.5px solid var(--sobre-fundo); border-radius: 10px; overflow: hidden; margin: 10px 4px 0; }
+.alternar button { padding: 8px 4px; font-size: 15px; font-weight: 500; color: var(--sobre-fundo); background: var(--vidro); }
+.alternar button + button { border-left: 1.5px solid var(--sobre-fundo); }
+.alternar button.ativo { background: var(--sobre-fundo); color: var(--fundo); font-weight: 700; }
+.topo-linha .tit u { cursor: pointer; text-underline-offset: 2px; }
+
+.rel-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 14px 12px 0; }
+.rel-num { background: var(--fundo-suave); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rel-num svg.ic { width: 18px; height: 18px; color: var(--destaque); }
+.rel-num b { font-size: 21px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rel-num span { font-size: 11.5px; color: #555; line-height: 1.2; }
+.rel-bloco { margin: 12px 12px 0; padding: 14px; border: 1.5px solid #E8E8F0; border-radius: 16px; }
+.rel-bloco h3 { margin: 0 0 12px; font-size: 15px; }
+.rel-nota { margin: -6px 0 12px; font-size: 13px; color: #555; }
+.rel-vazio { margin: 0; color: var(--cinza); font-size: 14px; }
+
+.g-semana { display: flex; gap: 6px; height: 150px; align-items: flex-end; }
+.g-col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; gap: 4px; min-width: 0; }
+.g-n { font-size: 11px; color: var(--cinza); font-variant-numeric: tabular-nums; min-height: 14px; white-space: nowrap; }
+.g-trilho { width: 100%; max-width: 30px; background: var(--cinza-claro); border-radius: 8px; display: flex; align-items: flex-end; overflow: hidden; min-height: 6px; flex: 0 1 auto; }
+.g-trilho i { display: block; width: 100%; background: var(--destaque); border-radius: 8px; }
+.g-col small { font-size: 11px; color: var(--cinza); text-align: center; line-height: 1.2; }
+.g-col.hoje small { color: var(--preto); font-weight: 700; }
+.g-ano .g-trilho { max-width: 18px; }
+.g-ano .g-n { font-size: 9.5px; }
+
+.calor { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.calor-cab { text-align: center; font-size: 11px; color: var(--cinza); font-weight: 600; }
+.calor-d { aspect-ratio: 1; border-radius: 8px; display: grid; place-items: center; font-size: 12px; font-variant-numeric: tabular-nums; background: var(--papel); color: #999; }
+.calor-d.n1 { background: #F6DCDC; color: #8A3B3B; }
+.calor-d.n2 { background: color-mix(in srgb, var(--destaque) 22%, white); color: var(--preto); }
+.calor-d.n3 { background: color-mix(in srgb, var(--destaque) 50%, white); color: var(--preto); }
+.calor-d.n4 { background: var(--destaque); color: #fff; font-weight: 700; }
+.calor-d.fut { background: transparent; border: 1px dashed #DDD; color: #BBB; }
+.calor-d.hoje { box-shadow: 0 0 0 2px var(--preto); }
+.calor-leg { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 10px; font-size: 11px; color: var(--cinza); }
+.calor-leg i { width: 14px; height: 14px; border-radius: 4px; display: block; }
+.calor-leg i.n1 { background: #F6DCDC; } .calor-leg i.n2 { background: color-mix(in srgb, var(--destaque) 22%, white); }
+.calor-leg i.n3 { background: color-mix(in srgb, var(--destaque) 50%, white); } .calor-leg i.n4 { background: var(--destaque); }
+.calor-leg span { margin: 0 4px; }
+
+.rosca-area { display: flex; align-items: center; gap: 14px; }
+.rosca { width: 42%; max-width: 150px; flex: none; }
+.rosca-n { font-size: 24px; font-weight: 700; fill: var(--preto); }
+.rosca-t { font-size: 11px; fill: var(--cinza); }
+.legenda { flex: 1; display: flex; flex-direction: column; gap: 8px; font-size: 14px; min-width: 0; }
+.legenda div { display: flex; align-items: center; gap: 8px; }
+.legenda i { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+.legenda span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legenda b { font-variant-numeric: tabular-nums; }
+.legenda small { color: var(--cinza); width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.ritmo { display: block; width: 100%; text-align: left; padding: 12px 0; }
+.ritmo + .ritmo { border-top: 1px solid var(--linha); }
+.ritmo-l1 { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.ritmo-l1 b { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.chip { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 99px; white-space: nowrap; flex: none; }
+.chip.ok { background: #DDF2E6; color: #17663F; }
+.chip.bom { background: var(--fundo-suave); color: var(--destaque); }
+.chip.ruim { background: #FBE3E1; color: #A1261D; }
+.chip.neutro { background: var(--cinza-claro); color: #555; }
+.ritmo-barra { position: relative; display: block; height: 10px; border-radius: 99px; background: var(--cinza-claro); margin: 8px 0 6px; }
+.ritmo-barra i { display: block; height: 100%; border-radius: 99px; background: var(--cc); min-width: 4px; }
+.ritmo-barra em { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--preto); border-radius: 2px; }
+.ritmo small { font-size: 12.5px; color: var(--cinza); line-height: 1.4; display: block; }
+
+.rel-dois { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rel-dois > div { background: var(--papel); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rel-dois span { font-size: 12.5px; color: var(--cinza); }
+.rel-dois b { font-size: clamp(16px, 4.6vw, 20px); white-space: nowrap; }
+.rel-dois small { font-size: 12px; color: var(--cinza); }

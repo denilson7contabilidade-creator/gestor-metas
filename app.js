@@ -2,7 +2,7 @@
 /* Gestor de Metas — app instalável, dados guardados só no aparelho.
    Família: Gestor de Finanças (mesmo endereço, pastas vizinhas). */
 
-const VERSAO_APP = "1.0";
+const VERSAO_APP = "1.1";
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -59,10 +59,10 @@ function categoriasPadrao() {
     ["Casa", "house", 4], ["Trabalho", "briefcase", 10], ["Estudos", "graduation-cap", 8],
   ].map(([nome, icone, c]) => ({ id: novoId(), nome, icone, cor: CORES_CAT[c] }));
 }
-const dadosNovos = () => ({ v: 1, cats: categoriasPadrao(), metas: [], afazeres: [], compras: [], config: { resumo: "07:00", resumoAtivo: true } });
+const dadosNovos = () => ({ v: 1, cats: categoriasPadrao(), metas: [], afazeres: [], compras: [], historicoCompras: [], config: { resumo: "07:00", resumoAtivo: true } });
 function normalizar(d) {
   d = d && typeof d === "object" ? d : {};
-  for (const k of ["cats", "metas", "afazeres", "compras"]) if (!Array.isArray(d[k])) d[k] = [];
+  for (const k of ["cats", "metas", "afazeres", "compras", "historicoCompras"]) if (!Array.isArray(d[k])) d[k] = [];
   if (!d.cats.length) d.cats = categoriasPadrao();
   d.config = Object.assign({ resumo: "07:00", resumoAtivo: true }, d.config || {});
   d.metas.forEach((m) => { m.itens ||= []; m.regs ||= []; });
@@ -92,14 +92,21 @@ function exemplos() {
     { id: novoId(), titulo: "Pagar o boleto da internet", data: h, hora: "", repete: "nao", aviso: null, cat: C("Casa"), feitos: {} },
     { id: novoId(), titulo: "Reunião de alinhamento", data: h, hora: "14:00", repete: "nao", aviso: 30, cat: C("Trabalho"), feitos: {} },
   ];
+  // marca alguns dias anteriores como feitos, para os relatórios terem o que mostrar
+  for (let i = 1; i <= 12; i++) {
+    const dia = somaDias(h, -i), w = diaSemana(dia);
+    if (w >= 1 && w <= 5 && i % 4 !== 0) d.afazeres[0].feitos[dia] = true;
+  }
+  d.afazeres[0].data = somaDias(h, -14);
   d.compras = [
     { id: novoId(), nome: "Tênis de corrida", qtd: 1, preco: 35000, cat: C("Saúde"), nota: "", comprado: false },
     { id: novoId(), nome: "Mochila escolar", qtd: 1, preco: 18000, cat: C("Família"), nota: "Antes da volta às aulas", comprado: false },
+    { id: novoId(), nome: "Lâmpadas LED", qtd: 4, preco: 1200, cat: C("Casa"), nota: "", comprado: true, compradoEm: h },
   ];
   return d;
 }
 
-const S = { d: null, aba: "hoje", dia: hoje(), ano: null, filtro: "todas" };
+const S = { d: null, aba: "hoje", dia: hoje(), ano: null, filtro: "todas", rel: { modo: "semana", ref: hoje() } };
 const cat = (id) => S.d.cats.find((c) => c.id === id) || { nome: "Sem categoria", icone: "tag", cor: "#546E7A" };
 const bola = (c) => `<span class="bola cor" style="--cc:${c.cor}">${ic(c.icone)}</span>`;
 
@@ -136,18 +143,20 @@ function anel(p) {
 /* ================= CAMADAS (folhas e telas por cima) ================= */
 const pilha = [];
 history.replaceState({ camada: 0 }, "");
-function abrirCamada(html, { tela = false, aoFechar = null, substituir = false } = {}) {
+function abrirCamada(html, { tela = false, aoFechar = null, substituir = false, re = null } = {}) {
   if (substituir && pilha.length) pilha.pop().c.remove();
   const c = document.createElement("div");
   c.className = "camada";
   c.innerHTML = tela ? `<div class="tela">${html}</div>` : `<div class="fundo-escuro"></div><div class="folha"><div class="pegador"></div>${html}</div>`;
   $("#camadas").appendChild(c);
-  pilha.push({ c, aoFechar });
+  pilha.push({ c, aoFechar, re });
   if (!substituir) history.pushState({ camada: pilha.length }, "");
   if (!tela) $(".fundo-escuro", c).onclick = () => fechar();
   return $(tela ? ".tela" : ".folha", c);
 }
 let aposFechar = null;
+// redesenha a tela de baixo e a tela aberta por cima (lista de compras, meta…)
+function refrescar() { desenhar(); const t = pilha[pilha.length - 1]; if (t && t.re) t.re(); }
 const fechar = (n = 1, depois = null) => { if (!pilha.length) return depois && depois(); aposFechar = depois; history.go(-Math.min(n, pilha.length)); };
 window.addEventListener("popstate", (e) => {
   const alvo = (e.state && e.state.camada) || 0;
@@ -198,7 +207,7 @@ function escolherTema() {
 
 /* ================= TELAS PRINCIPAIS ================= */
 function desenhar() {
-  const telas = { hoje: telaHoje, metas: telaMetas, compras: telaCompras, ajustes: telaAjustes };
+  const telas = { hoje: telaHoje, metas: telaMetas, relatorios: telaRelatorios, ajustes: telaAjustes };
   $("#app").innerHTML = telas[S.aba]() + nav();
   $$("[data-aba]").forEach((b) => (b.onclick = () => { S.aba = b.dataset.aba; desenhar(); scrollTo(0, 0); }));
   $("[data-novo]").onclick = () => escolherNovo();
@@ -209,7 +218,7 @@ function nav() {
   const b = (aba, icone, rot) => `<button data-aba="${aba}" class="${S.aba === aba ? "ativo" : ""}">${ic(icone)}${rot}</button>`;
   return `<nav class="nav">${b("hoje", "calendar", "Hoje")}${b("metas", "target", "Metas")}
     <button class="mais" data-novo aria-label="Adicionar"><span>${ic("plus")}</span></button>
-    ${b("compras", "shopping-cart", "Compras")}${b("ajustes", "settings", "Ajustes")}</nav>`;
+    ${b("relatorios", "chart-column", "Relatórios")}${b("ajustes", "settings", "Ajustes")}</nav>`;
 }
 const ligar = {};
 
@@ -235,6 +244,7 @@ function telaHoje() {
   if (lista.length) corpo += `<div class="sec"><span>Afazeres ${eHoje ? "de hoje" : "do dia"}</span><span class="num">${feitos}/${lista.length}</span></div>` + lista.map((a) => linhaAfazer(a, iso)).join("");
   else if (vazioTotal) corpo += `<div class="vazio">${ic("target")}Bem-vindo! Toque no <b>+</b> para criar um afazer, uma meta ou uma compra.<button class="btn leve" data-exemplos>Ver o app com exemplos</button></div>`;
   else corpo += `<div class="vazio">${ic("calendar-clock")}Nada marcado para ${eHoje ? "hoje" : "este dia"}.<br>Toque no <b>+</b> para adicionar.</div>`;
+  if (!vazioTotal) corpo += atalhoCompras();
   return `<header class="topo">
       <div class="topo-linha"><button class="bt-redondo" data-dia="-1" aria-label="Dia anterior">${ic("chevron-left")}</button>
         <div class="tit"><b>${rotuloDia(iso)}</b><small>${nomeData(iso)}</small></div>
@@ -247,6 +257,7 @@ function telaHoje() {
 ligar.hoje = () => {
   $$("[data-dia]").forEach((b) => (b.onclick = () => { S.dia = somaDias(S.dia, Number(b.dataset.dia)); desenhar(); }));
   const h = $("[data-hoje]"); if (h) h.onclick = () => { S.dia = hoje(); desenhar(); };
+  const vc = $("[data-ver-compras]"); if (vc) vc.onclick = () => abrirCompras();
   const ex = $("[data-exemplos]"); if (ex) ex.onclick = () => { S.d = exemplos(); gravar(); desenhar(); aviso("Exemplos carregados. Edite ou apague à vontade."); };
 };
 
@@ -300,14 +311,14 @@ function telaMeta(id, substituir = false) {
   if (m.tipo === "lista") {
     const vagas = Math.max(0, Math.round(m.alvo) - m.itens.length);
     corpo = `<div class="sec"><span>${esc(m.unidade || "Itens")}</span><span>${((n) => n === 1 ? "1 feito" : n + " feitos")(m.itens.filter((x) => x.feito).length)}</span></div>
-      ${m.itens.map((x) => `<div class="linha-item${x.feito ? " feito" : ""}"><button class="marca" data-item="${x.id}" aria-label="Marcar"><i>${x.feito ? ic("check") : ""}</i></button><span class="t">${esc(x.texto)}</span><button class="rm" data-rm-item="${x.id}" aria-label="Remover">${ic("x")}</button></div>`).join("")}
+      ${m.itens.map((x) => `<div class="linha-item${x.feito ? " feito" : ""}"><button class="marca" data-item="${x.id}" aria-label="Marcar"><i>${x.feito ? ic("check") : ""}</i></button><span class="t">${esc(x.texto)}</span><button class="rm" data-menu-item="${x.id}" aria-label="Opções de ${esc(x.texto)}">${ic("ellipsis-vertical")}</button></div>`).join("")}
       ${vagas ? `<div class="linha-item"><span class="marca"></span><span class="t vaga">Ainda ${vagas === 1 ? "falta 1 para escolher" : `faltam ${vagas} para escolher`}</span></div>` : ""}
       <form class="add-linha" data-add-item><input name="t" maxlength="120" placeholder="Adicionar ${esc(m.unidade ? m.unidade.replace(/s$/, "") : "item")}…" aria-label="Novo item" required><button class="btn preto">${ic("plus")}</button></form>`;
   } else if (m.tipo === "valor" || m.tipo === "numero") {
     const din = m.tipo === "valor";
     corpo = `<form class="add-linha duplo" data-add-reg><input name="v" inputmode="decimal" placeholder="${din ? "Valor" : "Quanto"}" aria-label="Valor" required><input name="n" maxlength="60" placeholder="Nota (opcional)" aria-label="Nota"><button class="btn preto">${ic("plus")}</button></form>
       <div class="sec"><span>${din ? "Depósitos" : "Registros"}</span><span>${m.regs.length}</span></div>
-      ${m.regs.length ? m.regs.slice().reverse().map((r) => `<div class="linha-item"><span class="marca">${ic(din ? "coins" : "hash")}</span><span class="t">${esc(r.nota || (din ? "Depósito" : "Registro"))}<small>${dataCurta(r.data)}/${r.data.slice(0, 4)}</small></span><span class="val">${din ? fmtR(r.valor) : fmtN(r.valor) + " " + esc(m.unidade || "")}</span><button class="rm" data-rm-reg="${r.id}" aria-label="Remover">${ic("x")}</button></div>`).join("")
+      ${m.regs.length ? m.regs.slice().reverse().map((r) => `<div class="linha-item"><span class="marca">${ic(din ? "coins" : "hash")}</span><span class="t">${esc(r.nota || (din ? "Depósito" : "Registro"))}<small>${dataCurta(r.data)}/${r.data.slice(0, 4)}</small></span><span class="val">${din ? fmtR(r.valor) : fmtN(r.valor) + " " + esc(m.unidade || "")}</span><button class="rm" data-menu-reg="${r.id}" aria-label="Opções">${ic("ellipsis-vertical")}</button></div>`).join("")
         : `<div class="vazio" style="padding:28px">${din ? "Registre cada valor que você guardar." : "Some cada avanço aqui."}</div>`}`;
   } else {
     corpo = `<div style="padding:20px 16px"><button class="btn ${m.feita ? "leve" : "preto"}" data-simples>${ic(m.feita ? "repeat" : "check")} ${m.feita ? "Reabrir meta" : "Marcar como concluída"}</button></div>`;
@@ -320,13 +331,13 @@ function telaMeta(id, substituir = false) {
       <div class="det-grande">${Math.round(p.pct * 100)}%</div>
       <div class="det-sub">${esc(p.rot)}${!p.completa && falta ? " · " + falta : p.completa ? " · Meta alcançada!" : ""}</div>
       <div class="trilho"><i style="width:${(p.pct * 100).toFixed(1)}%"></i></div>
-    </header><div class="corpo">${corpo}</div>`, { tela: true, aoFechar: desenhar, substituir });
+    </header><div class="corpo">${corpo}</div>`, { tela: true, aoFechar: desenhar, substituir, re: () => telaMeta(id, true) });
   const de_novo = () => telaMeta(id, true);
   $("[data-voltar]", el).onclick = () => fechar();
   $("[data-editar]", el).onclick = () => editarMeta(m);
   $$("[data-item]", el).forEach((b) => (b.onclick = () => { const x = m.itens.find((i) => i.id === b.dataset.item); x.feito = !x.feito; const antes = p.completa; gravar(); de_novo(); if (!antes && progresso(m).completa) aviso("Meta alcançada! 🎉"); }));
-  $$("[data-rm-item]", el).forEach((b) => (b.onclick = () => { m.itens = m.itens.filter((i) => i.id !== b.dataset.rmItem); gravar(); de_novo(); }));
-  $$("[data-rm-reg]", el).forEach((b) => (b.onclick = () => { m.regs = m.regs.filter((r) => r.id !== b.dataset.rmReg); gravar(); de_novo(); }));
+  $$("[data-menu-item]", el).forEach((b) => (b.onclick = () => menuItem(m, m.itens.find((i) => i.id === b.dataset.menuItem))));
+  $$("[data-menu-reg]", el).forEach((b) => (b.onclick = () => menuRegistro(m, m.regs.find((r) => r.id === b.dataset.menuReg))));
   const fi = $("[data-add-item]", el);
   if (fi) fi.onsubmit = (e) => { e.preventDefault(); const t = fi.t.value.trim(); if (!t) return; m.itens.push({ id: novoId(), texto: t, feito: false }); gravar(); de_novo(); setTimeout(() => { const f = $("[data-add-item] input"); f && f.focus(); }, 30); };
   const fr = $("[data-add-reg]", el);
@@ -350,23 +361,245 @@ function linhaCompra(x) {
       <span class="info"><span><i class="pontinho" style="--cc:${c.cor}"></i>${esc(c.nome)}</span>${x.nota ? `<span>${esc(x.nota)}</span>` : ""}</span></span>
       ${tot ? `<span class="val">${fmtR(tot)}</span>` : ""}</button></div>`;
 }
-function telaCompras() {
+function atalhoCompras() {
+  const pend = S.d.compras.filter((x) => !x.comprado);
+  const total = pend.reduce((s, x) => s + (x.preco || 0) * (x.qtd || 1), 0);
+  return `<button class="atalho" data-ver-compras><span class="bola">${ic("shopping-cart")}</span>
+    <span class="meio"><b>Lista de compras</b><small>${pend.length ? `${pend.length} para comprar · ${fmtR(total)}` : "Nada pendente"}</small></span><span class="seta">${ic("chevron-right")}</span></button>`;
+}
+function abrirCompras(substituir = false) {
   const pend = S.d.compras.filter((x) => !x.comprado), feitas = S.d.compras.filter((x) => x.comprado);
   const total = pend.reduce((s, x) => s + (x.preco || 0) * (x.qtd || 1), 0);
   let corpo = "";
   if (pend.length) corpo += `<div class="sec"><span>Para comprar</span><span>${pend.length}</span></div>` + pend.map(linhaCompra).join("");
-  else corpo += `<div class="vazio">${ic("shopping-cart")}Nada pendente na lista.<br>Toque no <b>+</b> e escolha <b>Compra</b>.</div>`;
+  else corpo += `<div class="vazio">${ic("shopping-cart")}Nada pendente na lista.</div>`;
   if (feitas.length) corpo += `<div class="sec"><span>Comprados</span><button data-limpar>Limpar comprados</button></div>` + feitas.map(linhaCompra).join("");
-  return `<header class="topo">
-      <div class="topo-linha"><span class="bt-redondo vazio"></span><div class="tit"><b>Compras</b><small>O que você precisa comprar</small></div><span class="bt-redondo vazio"></span></div>
+  const el = abrirCamada(`<header class="topo">
+      <div class="topo-linha"><button class="bt-redondo" data-voltar aria-label="Voltar">${ic("chevron-left")}</button><div class="tit"><b>Compras</b><small>O que você precisa comprar</small></div>
+        <button class="bt-redondo" data-nova-compra aria-label="Nova compra">${ic("plus")}</button></div>
       <div class="painel"><span class="bola" style="width:74px;height:74px;background:var(--vidro);color:var(--sobre-fundo)">${ic("shopping-bag")}</span>
         <div class="txt"><b class="num">${fmtR(total)}</b><span>${pend.length ? `estimado para ${pend.length} ${pend.length === 1 ? "item" : "itens"}` : "nenhum item pendente"}</span></div></div>
+    </header><div class="corpo">${corpo}</div>`, { tela: true, aoFechar: desenhar, substituir, re: () => abrirCompras(true) });
+  $("[data-voltar]", el).onclick = () => fechar();
+  $("[data-nova-compra]", el).onclick = () => editarCompra();
+  $$("[data-comprar]", el).forEach((b) => (b.onclick = () => {
+    const x = S.d.compras.find((i) => i.id === b.dataset.comprar); x.comprado = !x.comprado;
+    if (x.comprado) x.compradoEm = hoje(); else delete x.compradoEm;
+    gravar(); abrirCompras(true);
+  }));
+  $$("[data-compra]", el).forEach((b) => (b.onclick = () => editarCompra(S.d.compras.find((i) => i.id === b.dataset.compra))));
+  const l = $("[data-limpar]", el); if (l) l.onclick = () => {
+    const n = feitas.length;
+    // guarda o que foi comprado (para os relatórios) e tira da lista
+    S.d.historicoCompras.push(...feitas.map((x) => ({ nome: x.nome, valor: (x.preco || 0) * (x.qtd || 1), cat: x.cat, data: x.compradoEm || hoje() })));
+    S.d.compras = pend; gravar(); abrirCompras(true); aviso(`${n} ${n === 1 ? "item removido" : "itens removidos"} da lista`);
+  };
+}
+
+/* ---------- ITENS E REGISTROS DAS METAS (menu ⋮) ---------- */
+function menuAcoes(titulo, sub, aoEditar, aoExcluir) {
+  const el = abrirCamada(`<h2>${esc(titulo)}</h2>${sub ? `<p class="dica" style="text-align:center;margin-top:-8px">${esc(sub)}</p>` : ""}
+    <div class="botoes"><button class="btn leve" data-ed>${ic("pencil")} Editar</button><button class="btn perigo" data-ex>${ic("trash")} Excluir</button></div>`, { aoFechar: refrescar });
+  $("[data-ed]", el).onclick = aoEditar;
+  armar($("[data-ex]", el), aoExcluir);
+}
+function menuItem(m, x) {
+  if (!x) return;
+  menuAcoes(x.texto, x.feito ? "Marcado como feito" : "", () => {
+    const el = abrirCamada(`<h2>Editar ${esc(m.unidade ? m.unidade.replace(/s$/, "") : "item")}</h2><form data-f>
+      <label>Nome<input name="t" maxlength="120" required value="${esc(x.texto)}"></label>
+      <label class="marcar-linha"><input type="checkbox" name="feito" ${x.feito ? "checked" : ""}> Já foi feito</label>
+      <div class="botoes"><button class="btn preto">${ic("check")} Salvar</button></div></form>`, { aoFechar: refrescar, substituir: true });
+    const f = $("[data-f]", el); f.t.focus();
+    f.onsubmit = (e) => { e.preventDefault(); const t = f.t.value.trim(); if (!t) return; x.texto = t; x.feito = f.feito.checked; gravar(); fechar(); aviso("Item atualizado"); };
+  }, () => { m.itens = m.itens.filter((i) => i.id !== x.id); gravar(); fechar(); aviso("Item excluído"); });
+}
+function menuRegistro(m, r) {
+  if (!r) return;
+  const din = m.tipo === "valor";
+  const rot = din ? fmtR(r.valor) : `${fmtN(r.valor)} ${m.unidade || ""}`.trim();
+  menuAcoes(rot, `${r.nota || (din ? "Depósito" : "Registro")} · ${dataCurta(r.data)}/${r.data.slice(0, 4)}`, () => {
+    const el = abrirCamada(`<h2>Editar ${din ? "depósito" : "registro"}</h2><form data-f>
+      <div class="dois"><label>${din ? "Valor (R$)" : "Quanto"}<input name="v" inputmode="decimal" required value="${din ? paraCampo(r.valor / 100) : paraCampo(r.valor)}"></label>
+        <label>Dia<input type="date" name="d" required value="${r.data}"></label></div>
+      <label>Nota<input name="n" maxlength="60" value="${esc(r.nota)}" placeholder="Opcional"></label>
+      <div class="botoes"><button class="btn preto">${ic("check")} Salvar</button></div></form>`, { aoFechar: refrescar, substituir: true });
+    const f = $("[data-f]", el);
+    f.onsubmit = (e) => {
+      e.preventDefault();
+      const v = din ? lerCentavos(f.v.value) : lerNumero(f.v.value);
+      if (!Number.isFinite(v) || v === 0) return aviso("Digite um valor. Ex.: 250,00");
+      Object.assign(r, { valor: v, data: f.d.value || r.data, nota: f.n.value.trim() });
+      m.regs.sort((x, y) => x.data.localeCompare(y.data)); gravar(); fechar(); aviso("Registro atualizado");
+    };
+  }, () => { m.regs = m.regs.filter((i) => i.id !== r.id); gravar(); fechar(); aviso("Registro excluído"); });
+}
+
+/* ---------- RELATÓRIOS ---------- */
+const MES3 = MESES.map((m) => m.slice(0, 3));
+const DIA1 = ["D", "S", "T", "Q", "Q", "S", "S"];
+function periodo() {
+  const { modo, ref } = S.rel, d = dataDe(ref);
+  if (modo === "semana") { const ini = somaDias(ref, -((d.getDay() + 6) % 7)); return { ini, fim: somaDias(ini, 6) }; }
+  if (modo === "mes") { const ini = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-01`; return { ini, fim: isoDe(new Date(d.getFullYear(), d.getMonth() + 1, 0)) }; }
+  return { ini: `${d.getFullYear()}-01-01`, fim: `${d.getFullYear()}-12-31` };
+}
+function rotuloPeriodo() {
+  const { modo, ref } = S.rel, { ini, fim } = periodo(), d = dataDe(ref);
+  if (modo === "semana") { const a = dataDe(ini), b = dataDe(fim); return `${a.getDate()} ${MES3[a.getMonth()]} – ${b.getDate()} ${MES3[b.getMonth()]}`; }
+  if (modo === "mes") return `${MESES[d.getMonth()]} de ${d.getFullYear()}`;
+  return String(d.getFullYear());
+}
+function moverPeriodo(n) {
+  const { modo, ref } = S.rel, d = dataDe(ref);
+  if (modo === "semana") S.rel.ref = somaDias(ref, 7 * n);
+  else if (modo === "mes") S.rel.ref = isoDe(new Date(d.getFullYear(), d.getMonth() + n, 1));
+  else S.rel.ref = `${d.getFullYear() + n}-01-01`;
+}
+// total e feitos de cada dia do período (só até hoje)
+function diasDoPeriodo() {
+  const { ini, fim } = periodo(), h = hoje(), dias = [];
+  for (let iso = ini; iso <= fim; iso = somaDias(iso, 1)) {
+    if (iso > h) { dias.push({ iso, futuro: true, total: 0, feitos: 0 }); continue; }
+    const l = afazeresDoDia(iso);
+    dias.push({ iso, total: l.length, feitos: l.filter((a) => a.feitos[iso]).length, lista: l });
+  }
+  return dias;
+}
+function sequenciaAtual() {
+  let n = 0, iso = hoje();
+  const lh = afazeresDoDia(iso);
+  if (!lh.length || lh.some((a) => !a.feitos[iso])) iso = somaDias(iso, -1); // hoje ainda não terminou
+  for (let i = 0; i < 400; i++, iso = somaDias(iso, -1)) {
+    const l = afazeresDoDia(iso);
+    if (!l.length) { if (!S.d.afazeres.some((a) => a.data <= iso)) break; continue; }
+    if (l.every((a) => a.feitos[iso])) n++; else break;
+  }
+  return n;
+}
+function graficoSemana(dias) {
+  const max = Math.max(1, ...dias.map((d) => d.total)), h = hoje();
+  return `<div class="g-semana">${dias.map((d) => {
+    const w = diaSemana(d.iso);
+    return `<div class="g-col${d.iso === h ? " hoje" : ""}"><span class="g-n">${d.futuro || !d.total ? "" : `${d.feitos}/${d.total}`}</span>
+      <span class="g-trilho" style="height:${(d.total / max) * 100}%"><i style="height:${d.total ? (d.feitos / d.total) * 100 : 0}%"></i></span>
+      <small>${DIA1[w]}<br>${dataDe(d.iso).getDate()}</small></div>`;
+  }).join("")}</div>`;
+}
+function graficoMes(dias) {
+  const vazio = (dataDe(dias[0].iso).getDay() + 6) % 7, h = hoje();
+  const nivel = (d) => d.futuro ? "fut" : !d.total ? "n0" : d.feitos === d.total ? "n4" : d.feitos / d.total >= 0.5 ? "n3" : d.feitos ? "n2" : "n1";
+  return `<div class="calor">${["S", "T", "Q", "Q", "S", "S", "D"].map((x) => `<span class="calor-cab">${x}</span>`).join("")}
+    ${"<span></span>".repeat(vazio)}${dias.map((d) => `<span class="calor-d ${nivel(d)}${d.iso === h ? " hoje" : ""}" title="${d.total ? `${d.feitos} de ${d.total}` : "sem afazeres"}">${dataDe(d.iso).getDate()}</span>`).join("")}</div>
+    <div class="calor-leg"><span>Nada feito</span><i class="n1"></i><i class="n2"></i><i class="n3"></i><i class="n4"></i><span>Tudo feito</span></div>`;
+}
+function graficoAno(dias) {
+  const meses = Array.from({ length: 12 }, () => ({ total: 0, feitos: 0, fut: true }));
+  for (const d of dias) { const m = meses[dataDe(d.iso).getMonth()]; if (!d.futuro) { m.fut = false; m.total += d.total; m.feitos += d.feitos; } }
+  const mesAt = new Date().getMonth(), anoAt = new Date().getFullYear(), anoP = dataDe(S.rel.ref).getFullYear();
+  return `<div class="g-semana g-ano">${meses.map((m, i) => {
+    const pct = m.total ? m.feitos / m.total : 0;
+    return `<div class="g-col${anoP === anoAt && i === mesAt ? " hoje" : ""}"><span class="g-n">${m.total ? Math.round(pct * 100) + "%" : ""}</span>
+      <span class="g-trilho" style="height:100%"><i style="height:${pct * 100}%"></i></span><small>${MES3[i].charAt(0).toUpperCase()}</small></div>`;
+  }).join("")}</div>`;
+}
+function rosca(fatias, total) {
+  const r = 42, C = 2 * Math.PI * r; let acc = 0;
+  const arcos = fatias.map((f) => { const len = (f.n / total) * C; const s = `<circle cx="60" cy="60" r="${r}" fill="none" stroke="${f.cor}" stroke-width="16" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 60 60)"/>`; acc += len; return s; }).join("");
+  return `<svg viewBox="0 0 120 120" class="rosca" aria-hidden="true"><circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--cinza-claro)" stroke-width="16"/>${arcos}
+    <text x="60" y="58" text-anchor="middle" class="rosca-n">${total}</text><text x="60" y="74" text-anchor="middle" class="rosca-t">feitos</text></svg>`;
+}
+// quanto do ano já passou (para comparar com o progresso das metas)
+function fracaoAno(ano) {
+  const agora = new Date(), a = agora.getFullYear();
+  if (ano < a) return 1; if (ano > a) return 0;
+  const ini = new Date(ano, 0, 1), fim = new Date(ano + 1, 0, 1);
+  return (agora - ini) / (fim - ini);
+}
+function ritmoMeta(m) {
+  const p = progresso(m), esp = fracaoAno(Number(m.ano)), agora = new Date();
+  let st, cls;
+  if (p.completa) { st = "Concluída"; cls = "ok"; }
+  else if (esp === 0) { st = `Começa em ${m.ano}`; cls = "neutro"; }
+  else if (m.tipo === "simples") { st = esp >= 1 ? "Não concluída" : "Em aberto"; cls = esp >= 1 ? "ruim" : "neutro"; }
+  else if (p.pct >= esp + 0.08) { st = "Adiantada"; cls = "ok"; }
+  else if (p.pct >= esp - 0.08) { st = "No ritmo"; cls = "bom"; }
+  else { st = "Atrasada"; cls = "ruim"; }
+  let dica = "";
+  if (!p.completa && esp < 1 && (m.tipo === "valor" || m.tipo === "numero" || m.tipo === "lista")) {
+    const mesesRest = Number(m.ano) > agora.getFullYear() ? 12 : 12 - agora.getMonth();
+    const falta = Math.max(0, m.alvo - p.feito), porMes = falta / mesesRest;
+    const q = Math.ceil(porMes * 10) / 10, un = (u) => (q === 1 ? u.replace(/s$/, "") : u);
+    dica = m.tipo === "valor" ? `Guardar ${fmtR(Math.ceil(porMes))} por mês para chegar lá`
+      : m.tipo === "numero" ? `${fmtN(q)} ${un(m.unidade || "")} por mês para chegar lá`
+      : `${fmtN(q)} ${un(m.unidade || "itens")} por mês para chegar lá`;
+  }
+  return { p, esp, st, cls, dica };
+}
+function telaRelatorios() {
+  const dias = diasDoPeriodo(), passados = dias.filter((d) => !d.futuro);
+  const total = passados.reduce((s, d) => s + d.total, 0), feitos = passados.reduce((s, d) => s + d.feitos, 0);
+  const perfeitos = passados.filter((d) => d.total && d.feitos === d.total).length;
+  const seq = sequenciaAtual();
+  // melhor dia da semana no período
+  const porDia = Array.from({ length: 7 }, () => ({ t: 0, f: 0 }));
+  passados.forEach((d) => { const w = diaSemana(d.iso); porDia[w].t += d.total; porDia[w].f += d.feitos; });
+  const melhor = porDia.map((x, w) => ({ w, pct: x.t ? x.f / x.t : -1, t: x.t })).filter((x) => x.t >= 1).sort((a, b) => b.pct - a.pct || b.t - a.t)[0];
+  // por categoria
+  const porCat = {};
+  passados.forEach((d) => (d.lista || []).forEach((a) => { if (a.feitos[d.iso]) porCat[a.cat] = (porCat[a.cat] || 0) + 1; }));
+  const fatias = Object.entries(porCat).map(([id, n]) => ({ c: cat(id), n })).sort((x, y) => y.n - x.n).map((x) => ({ nome: x.c.nome, cor: x.c.cor, n: x.n }));
+  // compras
+  const { ini, fim } = periodo();
+  const noPer = (iso) => iso && iso >= ini && iso <= fim;
+  const comprados = [...S.d.compras.filter((x) => x.comprado && noPer(x.compradoEm)).map((x) => ({ valor: (x.preco || 0) * (x.qtd || 1) })), ...S.d.historicoCompras.filter((x) => noPer(x.data))];
+  const gasto = comprados.reduce((s, x) => s + x.valor, 0);
+  const pend = S.d.compras.filter((x) => !x.comprado), pendTot = pend.reduce((s, x) => s + (x.preco || 0) * (x.qtd || 1), 0);
+  // metas do ano do período
+  const anoMetas = dataDe(S.rel.ref).getFullYear();
+  const metas = S.d.metas.filter((m) => Number(m.ano) === anoMetas);
+  const esp = fracaoAno(anoMetas);
+  const ord = { ruim: 0, bom: 1, neutro: 2, ok: 3 };
+  const rits = metas.map((m) => ({ m, r: ritmoMeta(m) })).sort((x, y) => ord[x.r.cls] - ord[y.r.cls]);
+  const modos = [["semana", "Semana"], ["mes", "Mês"], ["ano", "Ano"]];
+  const ehAtual = periodo().ini <= hoje() && hoje() <= periodo().fim;
+
+  let corpo = `<div class="rel-nums">
+      <div class="rel-num">${ic("flame")}<b>${seq}</b><span>${seq === 1 ? "dia seguido" : "dias seguidos"} com tudo feito</span></div>
+      <div class="rel-num">${ic("star")}<b>${perfeitos}</b><span>${perfeitos === 1 ? "dia perfeito" : "dias perfeitos"} no período</span></div>
+      <div class="rel-num">${ic("trophy")}<b>${melhor && melhor.pct > 0 ? DIAS[melhor.w].replace("-feira", "").replace(/^./, (c) => c.toUpperCase()) : "—"}</b><span>dia da semana em que você mais cumpre</span></div>
+    </div>`;
+  corpo += `<section class="rel-bloco"><h3>${S.rel.modo === "ano" ? "Afazeres por mês" : "Afazeres por dia"}</h3>
+    ${total || S.rel.modo !== "semana" ? (S.rel.modo === "semana" ? graficoSemana(dias) : S.rel.modo === "mes" ? graficoMes(dias) : graficoAno(dias)) : `<p class="rel-vazio">Nenhum afazer nesta semana.</p>`}</section>`;
+  if (fatias.length) corpo += `<section class="rel-bloco"><h3>O que você fez, por categoria</h3><div class="rosca-area">${rosca(fatias, feitos)}
+    <div class="legenda">${fatias.map((f) => `<div><i style="background:${f.cor}"></i><span>${esc(f.nome)}</span><b>${f.n}</b><small>${Math.round((f.n / feitos) * 100)}%</small></div>`).join("")}</div></div></section>`;
+  corpo += `<section class="rel-bloco"><h3>Ritmo das metas de ${anoMetas}</h3>
+    ${esp > 0 && esp < 1 ? `<p class="rel-nota">O ano já passou <b>${Math.round(esp * 100)}%</b>. A linha em cada barra mostra onde a meta deveria estar hoje.</p>` : esp === 0 ? `<p class="rel-nota">${anoMetas} ainda não começou. Abaixo, quanto você precisa fazer por mês.</p>` : ""}
+    ${rits.length ? rits.map(({ m, r }) => `<button class="ritmo" data-meta-rel="${m.id}" style="--cc:${cat(m.cat).cor}">
+      <span class="ritmo-l1"><b>${esc(m.titulo)}</b><span class="chip ${r.cls}">${r.st}</span></span>
+      <span class="ritmo-barra"><i style="width:${(r.p.pct * 100).toFixed(1)}%"></i>${esp > 0 && esp < 1 && m.tipo !== "simples" ? `<em style="left:${(esp * 100).toFixed(1)}%"></em>` : ""}</span>
+      <small>${esc(r.p.rot)} · ${Math.round(r.p.pct * 100)}%${r.dica ? `<br>${r.dica}` : ""}</small></button>`).join("")
+      : `<p class="rel-vazio">Nenhuma meta para ${anoMetas}.</p>`}</section>`;
+  corpo += `<section class="rel-bloco"><h3>Compras</h3><div class="rel-dois">
+      <div><span>Comprado ${S.rel.modo === "semana" ? "na semana" : S.rel.modo === "mes" ? "no mês" : "no ano"}</span><b class="num">${fmtR(gasto)}</b><small>${comprados.length} ${comprados.length === 1 ? "item" : "itens"}</small></div>
+      <div><span>Ainda para comprar</span><b class="num">${fmtR(pendTot)}</b><small>${pend.length} ${pend.length === 1 ? "item" : "itens"}</small></div></div>
+    <button class="btn leve" data-ver-compras style="margin-top:12px">${ic("shopping-cart")} Ver lista de compras</button></section>`;
+
+  return `<header class="topo">
+      <div class="topo-linha"><button class="bt-redondo" data-per="-1" aria-label="Período anterior">${ic("chevron-left")}</button>
+        <div class="tit"><b>Relatórios</b><small>${rotuloPeriodo()}${ehAtual ? "" : ` · <u data-per-atual>atual</u>`}</small></div>
+        <button class="bt-redondo" data-per="1" aria-label="Próximo período">${ic("chevron-right")}</button></div>
+      <div class="alternar">${modos.map(([k, v]) => `<button data-modo="${k}" class="${S.rel.modo === k ? "ativo" : ""}">${v}</button>`).join("")}</div>
+      <div class="painel">${anel(total ? feitos / total : 0)}<div class="txt"><b>${total ? `${feitos} de ${total} afazeres` : "Sem afazeres"}</b>
+        <span>${total ? `feitos ${S.rel.modo === "semana" ? "na semana" : S.rel.modo === "mes" ? "no mês" : "no ano"}${ehAtual ? " até agora" : ""}` : "Nenhum afazer neste período"}</span></div></div>
     </header><main class="conteudo">${corpo}</main>`;
 }
-ligar.compras = () => {
-  $$("[data-comprar]").forEach((b) => (b.onclick = () => { const x = S.d.compras.find((i) => i.id === b.dataset.comprar); x.comprado = !x.comprado; gravar(); desenhar(); }));
-  $$("[data-compra]").forEach((b) => (b.onclick = () => editarCompra(S.d.compras.find((i) => i.id === b.dataset.compra))));
-  const l = $("[data-limpar]"); if (l) l.onclick = () => { const n = S.d.compras.filter((x) => x.comprado).length; S.d.compras = S.d.compras.filter((x) => !x.comprado); gravar(); desenhar(); aviso(`${n} ${n === 1 ? "item removido" : "itens removidos"}`); };
+ligar.relatorios = () => {
+  $$("[data-per]").forEach((b) => (b.onclick = () => { moverPeriodo(Number(b.dataset.per)); desenhar(); }));
+  const at = $("[data-per-atual]"); if (at) at.onclick = () => { S.rel.ref = hoje(); desenhar(); };
+  $$("[data-modo]").forEach((b) => (b.onclick = () => { S.rel.modo = b.dataset.modo; desenhar(); }));
+  $$("[data-meta-rel]").forEach((b) => (b.onclick = () => telaMeta(b.dataset.metaRel)));
+  const vc = $("[data-ver-compras]"); if (vc) vc.onclick = () => abrirCompras();
 };
 
 /* ---------- AJUSTES ---------- */
@@ -582,7 +815,7 @@ function editarCompra(x, substituir = false) {
       ${gradeCat(e.cat)}
       <div class="botoes"><button class="btn preto">${ic("check")} Salvar</button>
         ${!novo ? `<button type="button" class="btn perigo" data-excluir>${ic("trash")} Excluir</button>` : ""}</div>
-    </form>`, { aoFechar: desenhar, substituir });
+    </form>`, { aoFechar: refrescar, substituir });
   const f = $("[data-f]", el);
   ligarGradeCat(el, e);
   f.onsubmit = (ev) => {
@@ -591,8 +824,10 @@ function editarCompra(x, substituir = false) {
     const qtd = lerNumero(f.qtd.value), preco = lerCentavos(f.preco.value);
     const dados = { nome, qtd: Number.isFinite(qtd) && qtd > 0 ? qtd : 1, preco: Number.isFinite(preco) ? preco : 0, nota: f.nota.value.trim(), cat: e.cat };
     if (novo) S.d.compras.push({ id: novoId(), comprado: false, ...dados }); else Object.assign(x, dados);
-    if (novo) S.aba = "compras";
-    gravar(); fechar(); aviso(novo ? "Adicionado à lista" : "Item atualizado");
+    gravar();
+    const listaAberta = pilha.some((p) => p.re && p.c.querySelector("[data-nova-compra]"));
+    if (novo && !listaAberta) fechar(1, () => abrirCompras()); else fechar();
+    aviso(novo ? "Adicionado à lista de compras" : "Item atualizado");
   };
   const b = $("[data-excluir]", el);
   if (b) armar(b, () => { S.d.compras = S.d.compras.filter((i) => i.id !== x.id); gravar(); fechar(); aviso("Item excluído"); });
