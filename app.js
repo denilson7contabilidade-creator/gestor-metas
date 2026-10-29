@@ -2,7 +2,7 @@
 /* Gestor de Metas — app instalável, dados guardados só no aparelho.
    Família: Gestor de Finanças (mesmo endereço, pastas vizinhas). */
 
-const VERSAO_APP = "1.1";
+const VERSAO_APP = "1.2";
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -608,7 +608,12 @@ function telaAjustes() {
   const rotN = { ativo: "Ativadas", bloqueado: "Bloqueadas", pedir: "Desativadas", sem: "Indisponível" }[st];
   const cfg = S.d.config;
   return `<header class="topo"><div class="topo-linha"><span class="bt-redondo vazio"></span><div class="tit"><b>Ajustes</b><small>Gestor de Metas</small></div><span class="bt-redondo vazio"></span></div></header>
-  <main class="conteudo">${faixaInstalar()}
+  <main class="conteudo">
+    <div class="secao"><h2>Aplicativo</h2><div class="caixa">
+      ${instalado()
+        ? `<div class="linha-opc">${bola({ cor: "#1F8A55", icone: "circle-check" })}<span class="meio">App instalado<small>Você está usando o app pela tela inicial do celular.</small></span><span class="estado on">Instalado</span></div>`
+        : `<button class="linha-opc" data-instalar-ajustes>${bola({ cor: "#3A3FBF", icone: "smartphone" })}<span class="meio">Instalar o app<small>Coloca o ícone do Gestor de Metas na tela inicial do celular.</small></span><span class="seta">${ic("download")}</span></button>`}
+    </div></div>
     <div class="secao"><h2>Lembretes</h2><div class="caixa">
       <button class="linha-opc" data-notif>${bola({ cor: "#3A3FBF", icone: st === "ativo" ? "bell" : "bell-off" })}<span class="meio">Notificações no celular<small>${{ ativo: "Avisos dos afazeres com horário e resumo do dia.", bloqueado: "O Chrome está bloqueando. Toque para ver como liberar.", pedir: "Toque para permitir os avisos.", sem: "Este navegador não mostra notificações." }[st]}</small></span><span class="estado${st === "ativo" ? " on" : ""}">${rotN}</span></button>
       <div class="linha-opc">${bola({ cor: "#B8860B", icone: "sun" })}<span class="meio">Resumo do dia<small>Avisa quantos afazeres você tem no dia.</small>
@@ -632,6 +637,7 @@ function telaAjustes() {
   </main>`;
 }
 ligar.ajustes = () => {
+  const ia = $("[data-instalar-ajustes]"); if (ia) ia.onclick = instalarApp;
   $("[data-notif]").onclick = pedirNotificacoes;
   $("[data-resumo]").onclick = () => { S.d.config.resumoAtivo = !S.d.config.resumoAtivo; gravar(); desenhar(); };
   $("[data-resumo-hora]").onchange = (e) => { if (e.target.value) { S.d.config.resumo = e.target.value; gravar(); aviso(`Resumo às ${e.target.value}`); } };
@@ -679,8 +685,22 @@ function ligarComuns() {
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalar = e; desenhar(); });
 window.addEventListener("appinstalled", () => { pedidoInstalar = null; desenhar(); registrarPeriodico(); });
 async function instalarApp() {
-  if (!pedidoInstalar) return aviso("No Chrome, toque em ⋮ e depois em “Instalar app”.");
-  pedidoInstalar.prompt(); await pedidoInstalar.userChoice; pedidoInstalar = null; desenhar();
+  if (pedidoInstalar) {
+    const p = pedidoInstalar; p.prompt();
+    const r = await p.userChoice; pedidoInstalar = null; desenhar();
+    if (r && r.outcome === "accepted") aviso("Pronto! O ícone vai aparecer na tela inicial.");
+    return;
+  }
+  // o Chrome não ofereceu a instalação direta: mostra o caminho manual
+  const el = abrirCamada(`<h2>Instalar o app</h2>
+    <div class="passos">
+      <div><b>1</b><span>No <b>Chrome</b>, toque nos três pontinhos <b>⋮</b> no canto de cima.</span></div>
+      <div><b>2</b><span>Toque em <b>Instalar app</b>. Em alguns celulares aparece <b>Adicionar à tela inicial</b>.</span></div>
+      <div><b>3</b><span>Confirme em <b>Instalar</b>. O ícone do Gestor de Metas aparece na tela inicial.</span></div>
+    </div>
+    <p class="dica">Usa o navegador da Samsung? Toque em <b>☰</b> (embaixo) → <b>Adicionar página a</b> → <b>Tela inicial</b>.<br>Se a opção não aparecer, o app pode já estar instalado: procure o ícone <b>Gestor de Metas</b> na tela inicial ou na gaveta de apps.</p>
+    <div class="botoes"><button class="btn preto" data-ok>Entendi</button></div>`);
+  $("[data-ok]", el).onclick = () => fechar();
 }
 
 /* ================= ADICIONAR E EDITAR ================= */
