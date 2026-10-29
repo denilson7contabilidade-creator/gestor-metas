@@ -2,7 +2,7 @@
 /* Gestor de Metas — app instalável, dados guardados só no aparelho.
    Família: Gestor de Finanças (mesmo endereço, pastas vizinhas). */
 
-const VERSAO_APP = "1.3";
+const VERSAO_APP = "1.4";
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -59,12 +59,12 @@ function categoriasPadrao() {
     ["Casa", "house", 4], ["Trabalho", "briefcase", 10], ["Estudos", "graduation-cap", 8],
   ].map(([nome, icone, c]) => ({ id: novoId(), nome, icone, cor: CORES_CAT[c] }));
 }
-const dadosNovos = () => ({ v: 1, cats: categoriasPadrao(), metas: [], afazeres: [], compras: [], historicoCompras: [], config: { resumo: "07:00", resumoAtivo: true } });
+const dadosNovos = () => ({ v: 1, cats: categoriasPadrao(), metas: [], afazeres: [], compras: [], historicoCompras: [], config: { resumo: "07:00", resumoAtivo: true, backupFreq: "semanal", criadoEm: hoje() } });
 function normalizar(d) {
   d = d && typeof d === "object" ? d : {};
   for (const k of ["cats", "metas", "afazeres", "compras", "historicoCompras"]) if (!Array.isArray(d[k])) d[k] = [];
   if (!d.cats.length) d.cats = categoriasPadrao();
-  d.config = Object.assign({ resumo: "07:00", resumoAtivo: true }, d.config || {});
+  d.config = Object.assign({ resumo: "07:00", resumoAtivo: true, backupFreq: "semanal", criadoEm: hoje() }, d.config || {});
   d.metas.forEach((m) => { m.itens ||= []; m.regs ||= []; });
   d.afazeres.forEach((a) => { a.feitos ||= {}; a.repete ||= "nao"; if (a.aviso === undefined) a.aviso = a.hora ? 0 : null; });
   d.v = 1; return d;
@@ -239,7 +239,7 @@ function telaHoje() {
   const agora = `${p2(new Date().getHours())}:${p2(new Date().getMinutes())}`;
   const prox = eHoje ? lista.find((a) => !a.feitos[iso] && a.hora && a.hora >= agora) : null;
   const vazioTotal = !S.d.afazeres.length && !S.d.metas.length && !S.d.compras.length;
-  let corpo = faixaInstalar() + cartaoNotificacoes() + cartaoFamilia();
+  let corpo = cartaoBackup() + faixaInstalar() + cartaoNotificacoes() + cartaoFamilia();
   if (atr.length) corpo += `<div class="sec atraso"><span>Atrasados</span><span>${atr.length}</span></div>` + atr.map((a) => linhaAfazer(a, a.data, true)).join("");
   if (lista.length) corpo += `<div class="sec"><span>Afazeres ${eHoje ? "de hoje" : "do dia"}</span><span class="num">${feitos}/${lista.length}</span></div>` + lista.map((a) => linhaAfazer(a, iso)).join("");
   else if (vazioTotal) corpo += `<div class="vazio">${ic("target")}Bem-vindo! Toque no <b>+</b> para criar um afazer, uma meta ou uma compra.<button class="btn leve" data-exemplos>Ver o app com exemplos</button></div>`;
@@ -625,7 +625,9 @@ function telaAjustes() {
       <button class="linha-opc" data-tema-bt>${bola({ cor: temaAtual().destaque, icone: "palette" })}<span class="meio">Cor do app<small>${temaAtual().nome}</small></span><span class="seta">${ic("chevron-right")}</span></button>
     </div></div>
     <div class="secao"><h2>Seus dados</h2><div class="caixa">
-      <button class="linha-opc" data-backup>${bola({ cor: "#1E88E5", icone: "download" })}<span class="meio">Salvar backup<small>Baixa um arquivo com tudo, para guardar ou trocar de celular.</small></span><span class="seta">${ic("chevron-right")}</span></button>
+      <button class="linha-opc" data-backup>${bola({ cor: "#1E88E5", icone: "download" })}<span class="meio">Fazer backup agora<small>${textoUltimoBackup()}</small></span><span class="seta">${ic("chevron-right")}</span></button>
+      <div class="linha-opc">${bola({ cor: "#B8860B", icone: "calendar-clock" })}<span class="meio">Lembrete de backup<small>O app avisa quando chegar a hora de fazer o backup.</small>
+        <span class="seletor" style="margin-top:10px;--n:3">${[["semanal", "Semanal"], ["mensal", "Mensal"], ["nunca", "Desligado"]].map(([k, v]) => `<button data-freq="${k}" class="${S.d.config.backupFreq === k ? "sel" : ""}">${v}</button>`).join("")}</span></span></div>
       <label class="linha-opc" style="cursor:pointer">${bola({ cor: "#43A047", icone: "upload" })}<span class="meio">Restaurar backup<small>Usa um arquivo salvo antes. Substitui os dados atuais.</small></span><span class="seta">${ic("chevron-right")}</span><input type="file" accept=".json,application/json" data-restaurar hidden></label>
     </div><p class="dica" style="font-size:13px;color:var(--cinza);margin:10px 4px 0">Seus dados ficam só neste celular. Nada é enviado para a internet.</p></div>
     <div class="secao"><h2>Apps da família</h2><div class="caixa">
@@ -644,7 +646,8 @@ ligar.ajustes = () => {
   const t = $("[data-testar]"); if (t) t.onclick = testarNotificacao;
   $("[data-cats]").onclick = telaCategorias;
   $("[data-tema-bt]").onclick = escolherTema;
-  $("[data-backup]").onclick = salvarBackup;
+  $("[data-backup]").onclick = () => escolherBackup();
+  $$("[data-freq]").forEach((b) => (b.onclick = () => { S.d.config.backupFreq = b.dataset.freq; S.d.config.backupAdiado = null; gravar(); desenhar(); aviso(b.dataset.freq === "nunca" ? "Lembrete de backup desligado" : `Lembrete ${b.dataset.freq}`); }));
   $("[data-restaurar]").onchange = (e) => restaurarBackup(e.target.files[0]);
 };
 
@@ -674,6 +677,8 @@ function ligarComuns() {
   const xi = $("[data-x-instalar]"); if (xi) xi.onclick = () => { dispensar("gm_sem_banner"); desenhar(); aviso("Para instalar depois: menu ⋮ do Chrome → Instalar app."); };
   const pn = $("[data-permitir]"); if (pn) pn.onclick = pedirNotificacoes;
   const xn = $("[data-x-notif]"); if (xn) xn.onclick = () => { dispensar("gm_sem_cartao_notif"); desenhar(); };
+  const bf = $("[data-bk-fazer]"); if (bf) bf.onclick = () => escolherBackup();
+  const ba = $("[data-bk-adiar]"); if (ba) ba.onclick = () => { S.d.config.backupAdiado = somaDias(hoje(), 3); gravar(); desenhar(); aviso("Lembro de novo em 3 dias"); };
   const xf = $("[data-x-familia]"); if (xf) xf.onclick = () => { dispensar("gm_sem_familia_" + xf.dataset.xFamilia); desenhar(); };
   $$("[data-marcar]").forEach((b) => (b.onclick = () => {
     const a = S.d.afazeres.find((x) => x.id === b.dataset.marcar), d = b.dataset.dia;
@@ -897,10 +902,61 @@ function editarCategoria(c, depois) {
 }
 
 /* ================= BACKUP ================= */
+const DIA_MS = 864e5;
+const temDados = () => S.d.metas.length + S.d.afazeres.length + S.d.compras.length > 0;
+function diasDesde(iso) { return iso ? Math.floor((dataDe(hoje()) - dataDe(iso.slice(0, 10))) / DIA_MS) : null; }
+function textoUltimoBackup() {
+  const d = diasDesde(S.d.config.ultimoBackup);
+  return d === null ? "Nenhum backup feito ainda." : d === 0 ? "Último backup: hoje." : d === 1 ? "Último backup: ontem." : `Último backup: há ${d} dias.`;
+}
+// chegou a hora? (semanal: 7 dias; mensal: 30 dias, contando do último backup ou do início do uso)
+function backupVencido() {
+  const c = S.d.config;
+  if (c.backupFreq === "nunca" || !temDados()) return false;
+  if (c.backupAdiado && c.backupAdiado > hoje()) return false;
+  const prazo = c.backupFreq === "mensal" ? 30 : 7;
+  const base = c.ultimoBackup || c.criadoEm || hoje();
+  return diasDesde(base) >= prazo;
+}
+function cartaoBackup() {
+  if (!backupVencido()) return "";
+  const c = S.d.config, d = diasDesde(c.ultimoBackup);
+  return `<div class="cartao-aviso">${ic("download")}<div><b>Hora do backup ${c.backupFreq === "mensal" ? "do mês" : "da semana"}</b>
+    <small>${d === null ? "Você ainda não fez nenhum backup." : `Seu último backup foi há ${d} dias.`} Ele protege seus dados se limpar o Chrome ou trocar de celular.</small>
+    <div class="acoes"><button data-bk-fazer>Fazer backup</button><button class="sec-bt" data-bk-adiar>Daqui a 3 dias</button></div></div></div>`;
+}
+function arquivoBackup() {
+  const nome = `gestor-metas-backup-${hoje()}.json`;
+  const texto = JSON.stringify({ app: "gestor-metas", versao: VERSAO_APP, salvoEm: new Date().toISOString(), dados: S.d }, null, 1);
+  return { nome, blob: new Blob([texto], { type: "application/json" }) };
+}
+function marcarBackupFeito() { S.d.config.ultimoBackup = new Date().toISOString(); S.d.config.backupAdiado = null; gravar(); desenhar(); }
+function podeCompartilhar() {
+  try { const { nome, blob } = arquivoBackup(); return !!(navigator.canShare && navigator.canShare({ files: [new File([blob], nome, { type: "application/json" })] })); } catch { return false; }
+}
+function escolherBackup() {
+  const share = podeCompartilhar();
+  const el = abrirCamada(`<h2>Fazer backup</h2><p class="dica" style="text-align:center">${esc(textoUltimoBackup())}</p>
+    <div class="botoes">
+      ${share ? `<button class="btn preto" data-enviar>${ic("upload")} Enviar para Drive, WhatsApp ou e-mail</button>` : ""}
+      <button class="btn ${share ? "leve" : "preto"}" data-baixar>${ic("download")} Salvar no celular (Downloads)</button>
+    </div>
+    <p class="dica" style="margin-top:12px">Dica: mandar para o <b>Google Drive</b> ou para o seu e-mail deixa o celular mais leve e protege o backup se você perder o aparelho.</p>`);
+  const be = $("[data-enviar]", el);
+  if (be) be.onclick = async () => {
+    const { nome, blob } = arquivoBackup();
+    try {
+      await navigator.share({ files: [new File([blob], nome, { type: "application/json" })], title: "Backup do Gestor de Metas" });
+      fechar(); marcarBackupFeito(); aviso("Backup enviado");
+    } catch (e) { if (e && e.name !== "AbortError") aviso("Não foi possível compartilhar. Use Salvar no celular."); }
+  };
+  $("[data-baixar]", el).onclick = () => { salvarBackup(); fechar(); };
+}
 function salvarBackup() {
-  const blob = new Blob([JSON.stringify({ app: "gestor-metas", versao: VERSAO_APP, salvoEm: new Date().toISOString(), dados: S.d }, null, 1)], { type: "application/json" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `gestor-metas-backup-${hoje()}.json`;
+  const { nome, blob } = arquivoBackup();
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nome;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  marcarBackupFeito();
   aviso("Backup salvo na pasta Downloads.");
 }
 async function restaurarBackup(arq) {
@@ -911,7 +967,7 @@ async function restaurarBackup(arq) {
   if (!dados || !Array.isArray(dados.metas)) return aviso("Esse arquivo não é um backup do Gestor de Metas.");
   const el = abrirCamada(`<h2>Restaurar backup?</h2><p class="dica" style="text-align:center">Backup de ${bk.salvoEm ? new Date(bk.salvoEm).toLocaleDateString("pt-BR") : "data desconhecida"}: ${dados.metas.length} metas, ${(dados.afazeres || []).length} afazeres e ${(dados.compras || []).length} compras.<br>Os dados atuais deste celular serão substituídos.</p>
     <div class="botoes"><button class="btn preto" data-sim>Restaurar</button><button class="btn leve" data-nao>Cancelar</button></div>`);
-  $("[data-sim]", el).onclick = () => { S.d = normalizar(dados); S.ano = null; gravar(); fechar(); aviso("Backup restaurado"); };
+  $("[data-sim]", el).onclick = () => { S.d = normalizar(dados); S.d.config.ultimoBackup = bk.salvoEm || new Date().toISOString(); S.ano = null; gravar(); fechar(); aviso("Backup restaurado"); };
   $("[data-nao]", el).onclick = () => fechar();
 }
 
@@ -958,6 +1014,13 @@ function proximosAvisos() {
         const nomes = pend.slice(0, 3).map((a) => (a.hora ? a.hora + " " : "") + a.titulo).join(" · ");
         lista.push({ id: `r-${iso}`, at, titulo: `Você tem ${pend.length} ${pend.length === 1 ? "afazer" : "afazeres"} hoje`, corpo: nomes + (pend.length > 3 ? " …" : "") });
       }
+    }
+  }
+  // aviso de backup no horário do resumo (uma vez por dia enquanto estiver pendente)
+  if (backupVencido()) {
+    for (let i = 0; i < 2; i++) {
+      const iso = somaDias(h, i), at = new Date(`${iso}T${S.d.config.resumo || "09:00"}:00`).getTime() + 60000;
+      if (at > agora - 60000 && at < fim) lista.push({ id: `b-${iso}`, at, titulo: "Hora do backup", corpo: "Abra o Gestor de Metas e toque em Fazer backup. Leva 5 segundos." });
     }
   }
   return lista.sort((x, y) => x.at - y.at);
@@ -1023,8 +1086,13 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (tinhaControle) location.reload(); });
   navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(() => { agendarLembretes(); registrarPeriodico(); }).catch(() => {});
 }
+// pede ao Chrome para não apagar os dados sozinho quando o celular ficar sem espaço
+async function pedirArmazenamentoPermanente() {
+  try { if (navigator.storage && navigator.storage.persist && !(await navigator.storage.persisted())) await navigator.storage.persist(); } catch {}
+}
 aplicarTema();
 S.d = carregar() || dadosNovos();
 if (!localStorage.getItem(CHAVE)) { try { localStorage.setItem(CHAVE, JSON.stringify(S.d)); } catch {} }
 desenhar();
 agendarLembretes();
+pedirArmazenamentoPermanente();
