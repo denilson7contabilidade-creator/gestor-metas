@@ -2,7 +2,7 @@
 /* Gestor de Metas — app instalável, dados guardados só no aparelho.
    Família: Gestor de Finanças (mesmo endereço, pastas vizinhas). */
 
-const VERSAO_APP = "1.4";
+const VERSAO_APP = "1.5";
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -59,12 +59,15 @@ function categoriasPadrao() {
     ["Casa", "house", 4], ["Trabalho", "briefcase", 10], ["Estudos", "graduation-cap", 8],
   ].map(([nome, icone, c]) => ({ id: novoId(), nome, icone, cor: CORES_CAT[c] }));
 }
-const dadosNovos = () => ({ v: 1, cats: categoriasPadrao(), metas: [], afazeres: [], compras: [], historicoCompras: [], config: { resumo: "07:00", resumoAtivo: true, backupFreq: "semanal", criadoEm: hoje() } });
+const dadosNovos = () => ({ v: 1, cats: categoriasPadrao(), metas: [], afazeres: [], compras: [], historicoCompras: [], config: { resumo: "07:00", resumoAtivo: true, backupDias: 20, criadoEm: hoje() } });
 function normalizar(d) {
   d = d && typeof d === "object" ? d : {};
   for (const k of ["cats", "metas", "afazeres", "compras", "historicoCompras"]) if (!Array.isArray(d[k])) d[k] = [];
   if (!d.cats.length) d.cats = categoriasPadrao();
-  d.config = Object.assign({ resumo: "07:00", resumoAtivo: true, backupFreq: "semanal", criadoEm: hoje() }, d.config || {});
+  d.config = Object.assign({ resumo: "07:00", resumoAtivo: true, criadoEm: hoje() }, d.config || {});
+  // versão 1.4 usava semanal/mensal; agora é "avisar depois de X dias" (padrão 20)
+  if (d.config.backupDias == null) d.config.backupDias = d.config.backupFreq === "nunca" ? 0 : d.config.backupFreq === "mensal" ? 30 : 20;
+  delete d.config.backupFreq;
   d.metas.forEach((m) => { m.itens ||= []; m.regs ||= []; });
   d.afazeres.forEach((a) => { a.feitos ||= {}; a.repete ||= "nao"; if (a.aviso === undefined) a.aviso = a.hora ? 0 : null; });
   d.v = 1; return d;
@@ -626,8 +629,8 @@ function telaAjustes() {
     </div></div>
     <div class="secao"><h2>Seus dados</h2><div class="caixa">
       <button class="linha-opc" data-backup>${bola({ cor: "#1E88E5", icone: "download" })}<span class="meio">Fazer backup agora<small>${textoUltimoBackup()}</small></span><span class="seta">${ic("chevron-right")}</span></button>
-      <div class="linha-opc">${bola({ cor: "#B8860B", icone: "calendar-clock" })}<span class="meio">Lembrete de backup<small>O app avisa quando chegar a hora de fazer o backup.</small>
-        <span class="seletor" style="margin-top:10px;--n:3">${[["semanal", "Semanal"], ["mensal", "Mensal"], ["nunca", "Desligado"]].map(([k, v]) => `<button data-freq="${k}" class="${S.d.config.backupFreq === k ? "sel" : ""}">${v}</button>`).join("")}</span></span></div>
+      <div class="linha-opc">${bola({ cor: "#B8860B", icone: "calendar-clock" })}<span class="meio">Lembrete de backup<small>${S.d.config.backupDias ? `Depois de ${S.d.config.backupDias} dias sem backup, o app avisa ao abrir e manda notificação às 9h, 13h e 19h até você fazer.` : "Desligado. O app não vai lembrar do backup."}</small>
+        <span class="seletor" style="margin-top:10px;--n:4">${[[7, "7 dias"], [20, "20 dias"], [30, "30 dias"], [0, "Desligado"]].map(([k, v]) => `<button data-freq="${k}" class="${S.d.config.backupDias === k ? "sel" : ""}">${v}</button>`).join("")}</span></span></div>
       <label class="linha-opc" style="cursor:pointer">${bola({ cor: "#43A047", icone: "upload" })}<span class="meio">Restaurar backup<small>Usa um arquivo salvo antes. Substitui os dados atuais.</small></span><span class="seta">${ic("chevron-right")}</span><input type="file" accept=".json,application/json" data-restaurar hidden></label>
     </div><p class="dica" style="font-size:13px;color:var(--cinza);margin:10px 4px 0">Seus dados ficam só neste celular. Nada é enviado para a internet.</p></div>
     <div class="secao"><h2>Apps da família</h2><div class="caixa">
@@ -647,7 +650,7 @@ ligar.ajustes = () => {
   $("[data-cats]").onclick = telaCategorias;
   $("[data-tema-bt]").onclick = escolherTema;
   $("[data-backup]").onclick = () => escolherBackup();
-  $$("[data-freq]").forEach((b) => (b.onclick = () => { S.d.config.backupFreq = b.dataset.freq; S.d.config.backupAdiado = null; gravar(); desenhar(); aviso(b.dataset.freq === "nunca" ? "Lembrete de backup desligado" : `Lembrete ${b.dataset.freq}`); }));
+  $$("[data-freq]").forEach((b) => (b.onclick = () => { const n = Number(b.dataset.freq); S.d.config.backupDias = n; S.d.config.backupAdiado = null; gravar(); desenhar(); aviso(n ? `Aviso depois de ${n} dias sem backup` : "Lembrete de backup desligado"); }));
   $("[data-restaurar]").onchange = (e) => restaurarBackup(e.target.files[0]);
 };
 
@@ -678,7 +681,8 @@ function ligarComuns() {
   const pn = $("[data-permitir]"); if (pn) pn.onclick = pedirNotificacoes;
   const xn = $("[data-x-notif]"); if (xn) xn.onclick = () => { dispensar("gm_sem_cartao_notif"); desenhar(); };
   const bf = $("[data-bk-fazer]"); if (bf) bf.onclick = () => escolherBackup();
-  const ba = $("[data-bk-adiar]"); if (ba) ba.onclick = () => { S.d.config.backupAdiado = somaDias(hoje(), 3); gravar(); desenhar(); aviso("Lembro de novo em 3 dias"); };
+  const ba = $("[data-bk-adiar]"); if (ba) ba.onclick = () => { S.d.config.backupAdiado = somaDias(hoje(), 1); gravar(); desenhar(); aviso("Lembro de novo amanhã"); };
+  const bn = $("[data-bk-nunca]"); if (bn) bn.onclick = () => { S.d.config.backupDias = 0; gravar(); desenhar(); aviso("Não vou mais lembrar. Dá para religar em Ajustes."); };
   const xf = $("[data-x-familia]"); if (xf) xf.onclick = () => { dispensar("gm_sem_familia_" + xf.dataset.xFamilia); desenhar(); };
   $$("[data-marcar]").forEach((b) => (b.onclick = () => {
     const a = S.d.afazeres.find((x) => x.id === b.dataset.marcar), d = b.dataset.dia;
@@ -909,21 +913,20 @@ function textoUltimoBackup() {
   const d = diasDesde(S.d.config.ultimoBackup);
   return d === null ? "Nenhum backup feito ainda." : d === 0 ? "Último backup: hoje." : d === 1 ? "Último backup: ontem." : `Último backup: há ${d} dias.`;
 }
-// chegou a hora? (semanal: 7 dias; mensal: 30 dias, contando do último backup ou do início do uso)
+// chegou a hora? (X dias desde o último backup, ou desde o início do uso)
+const diasSemBackup = () => diasDesde(S.d.config.ultimoBackup || S.d.config.criadoEm || hoje());
 function backupVencido() {
   const c = S.d.config;
-  if (c.backupFreq === "nunca" || !temDados()) return false;
+  if (!c.backupDias || !temDados()) return false;
   if (c.backupAdiado && c.backupAdiado > hoje()) return false;
-  const prazo = c.backupFreq === "mensal" ? 30 : 7;
-  const base = c.ultimoBackup || c.criadoEm || hoje();
-  return diasDesde(base) >= prazo;
+  return diasSemBackup() >= c.backupDias;
 }
 function cartaoBackup() {
   if (!backupVencido()) return "";
-  const c = S.d.config, d = diasDesde(c.ultimoBackup);
-  return `<div class="cartao-aviso">${ic("download")}<div><b>Hora do backup ${c.backupFreq === "mensal" ? "do mês" : "da semana"}</b>
-    <small>${d === null ? "Você ainda não fez nenhum backup." : `Seu último backup foi há ${d} dias.`} Ele protege seus dados se limpar o Chrome ou trocar de celular.</small>
-    <div class="acoes"><button data-bk-fazer>Fazer backup</button><button class="sec-bt" data-bk-adiar>Daqui a 3 dias</button></div></div></div>`;
+  const d = diasDesde(S.d.config.ultimoBackup);
+  return `<div class="cartao-aviso alerta">${ic("download")}<div><b>${d === null ? "Você ainda não fez backup" : `Faz ${d} dias sem backup`}</b>
+    <small>O backup protege suas metas e afazeres se você limpar o Chrome ou trocar de celular.</small>
+    <div class="acoes"><button data-bk-fazer>Fazer backup</button><button class="sec-bt" data-bk-adiar>Lembrar amanhã</button><button class="sec-bt" data-bk-nunca>Não perguntar mais</button></div></div></div>`;
 }
 function arquivoBackup() {
   const nome = `gestor-metas-backup-${hoje()}.json`;
@@ -1016,11 +1019,17 @@ function proximosAvisos() {
       }
     }
   }
-  // aviso de backup no horário do resumo (uma vez por dia enquanto estiver pendente)
-  if (backupVencido()) {
+  // backup atrasado: avisa às 9h, 13h e 19h até ser feito (ou "lembrar amanhã" / "não perguntar mais")
+  if (S.d.config.backupDias && temDados()) {
     for (let i = 0; i < 2; i++) {
-      const iso = somaDias(h, i), at = new Date(`${iso}T${S.d.config.resumo || "09:00"}:00`).getTime() + 60000;
-      if (at > agora - 60000 && at < fim) lista.push({ id: `b-${iso}`, at, titulo: "Hora do backup", corpo: "Abra o Gestor de Metas e toque em Fazer backup. Leva 5 segundos." });
+      const iso = somaDias(h, i);
+      if (S.d.config.backupAdiado && S.d.config.backupAdiado > iso) continue;
+      const dias = diasSemBackup() + i;
+      if (dias < S.d.config.backupDias) continue;
+      for (const hora of ["09:00", "13:00", "19:00"]) {
+        const at = new Date(`${iso}T${hora}:00`).getTime();
+        if (at > agora - 60000 && at < fim) lista.push({ id: `b-${iso}-${hora}`, at, titulo: `Faz ${dias} dias sem backup`, corpo: "Abra o Gestor de Metas e toque em Fazer backup. Leva 5 segundos." });
+      }
     }
   }
   return lista.sort((x, y) => x.at - y.at);

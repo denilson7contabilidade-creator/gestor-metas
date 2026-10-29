@@ -309,3 +309,6 @@ svg.ic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-wid
 .passos > div { display: flex; gap: 12px; align-items: flex-start; }
 .passos > div > b { width: 28px; height: 28px; border-radius: 50%; background: var(--fundo); color: var(--sobre-fundo); display: grid; place-items: center; flex: none; font-size: 14px; }
 .passos span { padding-top: 3px; }
+
+.cartao-aviso.alerta { background: #FFF1D6; }
+.cartao-aviso .acoes { row-gap: 4px; }
